@@ -12,6 +12,7 @@ package builder
 import (
 	"testing"
 
+	"github.com/arduino/arduino-cli/internal/arduino/libraries"
 	semver "go.bug.st/relaxed-semver"
 
 	"github.com/stretchr/testify/require"
@@ -40,27 +41,51 @@ func TestLibrarySlug(t *testing.T) {
 }
 
 func TestEncodeLibraryVersion(t *testing.T) {
-	parse := func(s string) *semver.Version {
-		v, err := semver.Parse(s)
-		require.NoError(t, err)
-		return v
-	}
-
 	cases := []struct {
 		name string
 		in   *semver.Version
 		want uint32
 	}{
-		{"Full", parse("1.2.3"), 0x010203},
-		{"MajorMinorOnly", parse("1.2"), 0x010200},
-		{"MajorOnly", parse("1"), 0x010000},
+		{"Full", parseVersion(t, "1.2.3"), 0x010203},
+		{"MajorMinorOnly", parseVersion(t, "1.2"), 0x010200},
+		{"MajorOnly", parseVersion(t, "1"), 0x010000},
 		{"Nil", nil, 1},
-		{"EmptyRawVersion", parse(""), 1},
-		{"OverflowComponentClamped", parse("300.0.0"), 0xFF0000},
+		{"EmptyRawVersion", parseVersion(t, ""), 1},
+		{"OverflowComponentClamped", parseVersion(t, "300.0.0"), 0xFF0000},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			require.Equal(t, c.want, encodeLibraryVersion(c.in))
 		})
 	}
+}
+
+func TestBuildLibraryDiscoveryFlags(t *testing.T) {
+	t.Run("Empty", func(t *testing.T) {
+		require.Equal(t, "", buildLibraryDiscoveryFlags(libraries.List{}))
+	})
+
+	t.Run("SingleLibrary", func(t *testing.T) {
+		libs := libraries.List{
+			{Name: "Bridge", Version: parseVersion(t, "1.2.3")},
+		}
+		require.Equal(t, "-DFOUND_BRIDGE_LIB=0x010203", buildLibraryDiscoveryFlags(libs))
+	})
+
+	t.Run("MultipleLibrariesJoinedWithSpace", func(t *testing.T) {
+		libs := libraries.List{
+			{Name: "Bridge", Version: parseVersion(t, "1.2.3")},
+			{Name: "Bridge Client-2", Version: nil},
+		}
+		require.Equal(t,
+			"-DFOUND_BRIDGE_LIB=0x010203 -DFOUND_BRIDGE_CLIENT_2_LIB=0x000001",
+			buildLibraryDiscoveryFlags(libs))
+	})
+}
+
+func parseVersion(t *testing.T, s string) *semver.Version {
+	t.Helper()
+	v, err := semver.Parse(s)
+	require.NoError(t, err)
+	return v
 }

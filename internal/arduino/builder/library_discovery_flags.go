@@ -10,10 +10,12 @@
 package builder
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/arduino/arduino-cli/internal/arduino/libraries"
 	semver "go.bug.st/relaxed-semver"
 )
 
@@ -73,4 +75,14 @@ func clampVersionComponent(s string) uint8 {
 		return 0
 	}
 	return uint8(n)
+}
+
+// buildLibraryDiscoveryFlags renders one "-DFOUND_<SLUG>_LIB=0x<hex>" flag
+// per library in libs, joined by spaces, in libs' existing order.
+func buildLibraryDiscoveryFlags(libs libraries.List) string {
+	flags := make([]string, 0, len(libs))
+	for _, lib := range libs {
+		flags = append(flags, fmt.Sprintf("-DFOUND_%s_LIB=0x%06X", librarySlug(lib.Name), encodeLibraryVersion(lib.Version)))
+	}
+	return strings.Join(flags, " ")
 }

@@ -12,6 +12,8 @@ package builder
 import (
 	"testing"
 
+	semver "go.bug.st/relaxed-semver"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,6 +35,32 @@ func TestLibrarySlug(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			require.Equal(t, c.want, librarySlug(c.in))
+		})
+	}
+}
+
+func TestEncodeLibraryVersion(t *testing.T) {
+	parse := func(s string) *semver.Version {
+		v, err := semver.Parse(s)
+		require.NoError(t, err)
+		return v
+	}
+
+	cases := []struct {
+		name string
+		in   *semver.Version
+		want uint32
+	}{
+		{"Full", parse("1.2.3"), 0x010203},
+		{"MajorMinorOnly", parse("1.2"), 0x010200},
+		{"MajorOnly", parse("1"), 0x010000},
+		{"Nil", nil, 1},
+		{"EmptyRawVersion", parse(""), 1},
+		{"OverflowComponentClamped", parse("300.0.0"), 0xFF0000},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, encodeLibraryVersion(c.in))
 		})
 	}
 }

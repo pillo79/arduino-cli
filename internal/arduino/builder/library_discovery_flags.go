@@ -11,7 +11,10 @@ package builder
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
+
+	semver "go.bug.st/relaxed-semver"
 )
 
 var (
@@ -30,4 +33,44 @@ func librarySlug(name string) string {
 		slug = "_" + slug
 	}
 	return slug
+}
+
+var versionComponents = regexp.MustCompile(`^(\d+)(?:\.(\d+))?(?:\.(\d+))?`)
+
+// encodeLibraryVersion packs a library version into a 24-bit
+// major/minor/patch value (0xMMmmpp). A nil version, or a version string
+// with no leading numeric major component, encodes to 1 (the lowest
+// non-zero encoded value, i.e. 0.0.1) per the "unknown version" convention.
+// Each component is clamped to [0, 255] so it can't overflow into the next
+// byte. Minor/patch default to 0 when absent (e.g. "1" or "1.2" are valid).
+func encodeLibraryVersion(v *semver.Version) uint32 {
+	if v == nil {
+		return 1
+	}
+	m := versionComponents.FindStringSubmatch(v.String())
+	if m == nil {
+		return 1
+	}
+	major := clampVersionComponent(m[1])
+	minor := clampVersionComponent(m[2])
+	patch := clampVersionComponent(m[3])
+	return uint32(major)<<16 | uint32(minor)<<8 | uint32(patch)
+}
+
+// clampVersionComponent parses a numeric version component (possibly
+// empty, meaning "absent") and clamps it to [0, 255]. The uint8 return
+// type makes that bound visible to the type system, so callers can widen
+// it to a larger integer type without any risk of overflow.
+func clampVersionComponent(s string) uint8 {
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n > 255 {
+		return 255
+	}
+	if n < 0 {
+		return 0
+	}
+	return uint8(n)
 }

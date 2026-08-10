@@ -77,12 +77,41 @@ func clampVersionComponent(s string) uint8 {
 	return uint8(n)
 }
 
-// buildLibraryDiscoveryFlags renders one "-DFOUND_<SLUG>_LIB=0x<hex>" flag
-// per library in libs, joined by spaces, in libs' existing order.
+// librarySourceSuffix maps a library's discovery location to the macro
+// suffix identifying where it was found. Returns "" for any location with
+// no defined suffix (currently none — every known LibraryLocation value is
+// mapped — but this keeps the function total instead of panicking on a
+// future enum addition).
+func librarySourceSuffix(location libraries.LibraryLocation) string {
+	switch location {
+	case libraries.User:
+		return "IN_SKETCHBOOK"
+	case libraries.PlatformBuiltIn, libraries.ReferencedPlatformBuiltIn:
+		return "IN_PLATFORM"
+	case libraries.Profile:
+		return "IN_PROFILE"
+	case libraries.IDEBuiltIn:
+		return "IN_IDE"
+	case libraries.Unmanaged:
+		return "IN_SPECIFIED_PATH"
+	default:
+		return ""
+	}
+}
+
+// buildLibraryDiscoveryFlags renders the discovery macros for each library
+// in libs, joined by spaces, in libs' existing order: a
+// "-DFOUND_<SLUG>_LIB=0x<hex>" version macro, plus a
+// "-DFOUND_<SLUG>_LIB_<SUFFIX>=1" macro identifying where the library was
+// found (omitted if librarySourceSuffix has no mapping for its location).
 func buildLibraryDiscoveryFlags(libs libraries.List) string {
 	flags := make([]string, 0, len(libs))
 	for _, lib := range libs {
-		flags = append(flags, fmt.Sprintf("-DFOUND_%s_LIB=0x%06X", librarySlug(lib.Name), encodeLibraryVersion(lib.Version)))
+		slug := librarySlug(lib.Name)
+		flags = append(flags, fmt.Sprintf("-DFOUND_%s_LIB=0x%06X", slug, encodeLibraryVersion(lib.Version)))
+		if suffix := librarySourceSuffix(lib.Location); suffix != "" {
+			flags = append(flags, fmt.Sprintf("-DFOUND_%s_LIB_%s=1", slug, suffix))
+		}
 	}
 	return strings.Join(flags, " ")
 }

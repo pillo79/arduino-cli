@@ -27,7 +27,7 @@ func TestCompileLibraryDiscoveryFlags(t *testing.T) {
 	require.NoError(t, err)
 
 	sketchPath := cli.CopySketch("sketch_with_discovery_test_library")
-	librariesDir := sketchPath.Join("libraries")
+	libraryDir := sketchPath.Join("libraries", "DiscoveryTestLib")
 
 	// Deliberately NOT using --show-properties: that flag returns before
 	// Builder.preprocess() ever runs, so build.library_discovery_flags
@@ -37,9 +37,15 @@ func TestCompileLibraryDiscoveryFlags(t *testing.T) {
 	// ours) are always captured into the RPC response's build_properties
 	// field regardless of --show-properties; --json is how this test
 	// observes that field.
+	//
+	// Uses --library (singular, path to a single library's root folder),
+	// not --libraries (plural, path to a folder of libraries): the former
+	// sets Location == libraries.Unmanaged, the latter Location ==
+	// libraries.User — deliberately picking --library here to exercise the
+	// IN_SPECIFIED_PATH suffix.
 	stdout, stderr, err := cli.Run("compile",
 		"--fqbn", "arduino:avr:uno",
-		"--libraries", librariesDir.String(),
+		"--library", libraryDir.String(),
 		"--json",
 		sketchPath.String())
 	require.NoError(t, err)
@@ -57,5 +63,7 @@ func TestCompileLibraryDiscoveryFlags(t *testing.T) {
 		} `json:"builder_result"`
 	}
 	require.NoError(t, json.Unmarshal(stdout, &resp))
-	require.Contains(t, resp.BuilderResult.BuildProperties, "build.library_discovery_flags=-DFOUND_DISCOVERYTESTLIB_LIB=0x010203")
+	// The fixture library is provided via --library, i.e.
+	// Location == libraries.Unmanaged, hence IN_SPECIFIED_PATH.
+	require.Contains(t, resp.BuilderResult.BuildProperties, "build.library_discovery_flags=-DFOUND_DISCOVERYTESTLIB_LIB=0x010203 -DFOUND_DISCOVERYTESTLIB_LIB_IN_SPECIFIED_PATH=1")
 }

@@ -60,6 +60,27 @@ func TestEncodeLibraryVersion(t *testing.T) {
 	}
 }
 
+func TestLibrarySourceSuffix(t *testing.T) {
+	cases := []struct {
+		name string
+		in   libraries.LibraryLocation
+		want string
+	}{
+		{"User", libraries.User, "IN_SKETCHBOOK"},
+		{"PlatformBuiltIn", libraries.PlatformBuiltIn, "IN_PLATFORM"},
+		{"ReferencedPlatformBuiltIn", libraries.ReferencedPlatformBuiltIn, "IN_PLATFORM"},
+		{"Profile", libraries.Profile, "IN_PROFILE"},
+		{"IDEBuiltIn", libraries.IDEBuiltIn, "IN_IDE"},
+		{"Unmanaged", libraries.Unmanaged, "IN_SPECIFIED_PATH"},
+		{"OutOfRange", libraries.LibraryLocation(99), ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, librarySourceSuffix(c.in))
+		})
+	}
+}
+
 func TestBuildLibraryDiscoveryFlags(t *testing.T) {
 	t.Run("Empty", func(t *testing.T) {
 		require.Equal(t, "", buildLibraryDiscoveryFlags(libraries.List{}))
@@ -67,19 +88,28 @@ func TestBuildLibraryDiscoveryFlags(t *testing.T) {
 
 	t.Run("SingleLibrary", func(t *testing.T) {
 		libs := libraries.List{
-			{Name: "Bridge", Version: parseVersion(t, "1.2.3")},
+			{Name: "Bridge", Version: parseVersion(t, "1.2.3"), Location: libraries.User},
 		}
-		require.Equal(t, "-DFOUND_BRIDGE_LIB=0x010203", buildLibraryDiscoveryFlags(libs))
+		require.Equal(t,
+			"-DFOUND_BRIDGE_LIB=0x010203 -DFOUND_BRIDGE_LIB_IN_SKETCHBOOK=1",
+			buildLibraryDiscoveryFlags(libs))
 	})
 
 	t.Run("MultipleLibrariesJoinedWithSpace", func(t *testing.T) {
 		libs := libraries.List{
-			{Name: "Bridge", Version: parseVersion(t, "1.2.3")},
-			{Name: "Bridge Client-2", Version: nil},
+			{Name: "Bridge", Version: parseVersion(t, "1.2.3"), Location: libraries.User},
+			{Name: "Bridge Client-2", Version: nil, Location: libraries.PlatformBuiltIn},
 		}
 		require.Equal(t,
-			"-DFOUND_BRIDGE_LIB=0x010203 -DFOUND_BRIDGE_CLIENT_2_LIB=0x000001",
+			"-DFOUND_BRIDGE_LIB=0x010203 -DFOUND_BRIDGE_LIB_IN_SKETCHBOOK=1 -DFOUND_BRIDGE_CLIENT_2_LIB=0x000001 -DFOUND_BRIDGE_CLIENT_2_LIB_IN_PLATFORM=1",
 			buildLibraryDiscoveryFlags(libs))
+	})
+
+	t.Run("UnrecognizedLocationGetsNoSourceMacro", func(t *testing.T) {
+		libs := libraries.List{
+			{Name: "Bridge", Version: parseVersion(t, "1.2.3"), Location: libraries.LibraryLocation(99)},
+		}
+		require.Equal(t, "-DFOUND_BRIDGE_LIB=0x010203", buildLibraryDiscoveryFlags(libs))
 	})
 }
 
